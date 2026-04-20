@@ -245,121 +245,85 @@ class ROCAUC(ClassificationScoreVisualizer):
         """
         Generates the predicted target values using the Scikit-Learn
         estimator.
-
-        Parameters
-        ----------
-        X : ndarray or DataFrame of shape n x m
-            A matrix of n instances with m features
-
-        y : ndarray or Series of length n
-            An array or series of target or class values
-
-        Returns
-        -------
-        score_ : float
-            Global accuracy unless micro or macro scores are requested.
         """
-        # Call super to check if fitted and to compute self.score_
-        # NOTE: this sets score to the base score if neither macro nor micro
         super(ROCAUC, self).score(X, y)
-
-        # Compute the predictions for the test data
         y_pred = self._get_y_scores(X)
 
-        if self.target_type_ == BINARY:
-            # For binary, per_class must be True to draw micro/macro curves
-            if (self.micro or self.macro) and not self.per_class:
-                raise ModelError(
-                    "no curves will be drawn; ",
-                    "set per_class=True or micro=False and macro=False.",
-                )
-
-            # For binary, if predictions are returned in shape (n,), micro and macro
-            # curves are not defined
-            if (self.micro or self.macro) and len(y_pred.shape) == 1:
-                raise ModelError(
-                    "no curves will be drawn; set binary=True.",
-                )
-
-        if self.target_type_ == MULTICLASS:
-            # If it's multiclass classification, at least one of micro, macro, or
-            # per_class must be True
-            if not self.micro and not self.macro and not self.per_class:
-                raise YellowbrickValueError(
-                    "no curves will be drawn; specify micro, macro, or per_class"
-                )
-
-        # Classes may be label encoded so only use what's in y to compute.
-        # The self.classes_ attribute will be used as names for labels.
-        classes = np.unique(y)
-        n_classes = len(classes)
-
-        # Store the false positive rate, true positive rate and curve info.
         self.fpr = dict()
         self.tpr = dict()
         self.roc_auc = dict()
 
-        # If the decision is binary draw only ROC curve for the positive class
-        if self.target_type_ is BINARY and not self.per_class:
-            # In this case predict_proba returns an array of shape (n, 2) which
-            # specifies the probabilities of both the negative and positive classes.
+        classes = np.unique(y)
+        n_classes = len(classes)
+
+        # Execute Strategy
+        if self.target_type_ == BINARY:
+            self._validate_binary(y_pred)
+            self._score_binary(y, y_pred)
+        elif self.target_type_ == MULTICLASS:
+            self._validate_multiclass()
+            self._score_multiclass(y, y_pred, classes)
+
+        # Delegate averaging
+        self._calculate_averages(y, y_pred, classes, n_classes)
+
+        # Draw
+        self.draw()
+
+        return self.score_
+
+    def _calculate_averages(self, y, y_pred, classes, n_classes):
+        """Delegated helper to compute averages and set the final score."""
+        if self.micro:
+            self._score_micro_average(y, y_pred, classes, n_classes)
+            self.score_ = self.roc_auc[MICRO]
+
+        if self.macro:
+            self._score_macro_average(n_classes)
+            if not self.micro:  # Micro takes precedence for final score
+                self.score_ = self.roc_auc[MACRO]
+
+    def _validate_binary(self, y_pred):
+        """Helper to validate binary input constraints."""
+        if (self.micro or self.macro) and not self.per_class:
+            raise ModelError(
+                "no curves will be drawn; "
+                "set per_class=True or micro=False and macro=False."
+            )
+        if (self.micro or self.macro) and len(y_pred.shape) == 1:
+            raise ModelError("no curves will be drawn; set binary=True.")
+
+    def _validate_multiclass(self):
+        """Helper to validate multiclass input constraints."""
+        if not self.micro and not self.macro and not self.per_class:
+            raise YellowbrickValueError(
+                "no curves will be drawn; specify micro, macro, or per_class"
+            )
+
+    def _score_binary(self, y, y_pred):
+        """Computes true/false positive rates for binary classification."""
+        if not self.per_class:
             if len(y_pred.shape) == 2 and y_pred.shape[1] == 2:
                 self.fpr[BINARY], self.tpr[BINARY], _ = roc_curve(y, y_pred[:, 1])
             else:
-                # decision_function returns array of shape (n,), so plot it directly
                 self.fpr[BINARY], self.tpr[BINARY], _ = roc_curve(y, y_pred)
             self.roc_auc[BINARY] = auc(self.fpr[BINARY], self.tpr[BINARY])
-
-        # Per-class binary decisions may have to have the negative class curve computed
-        elif self.target_type_ is BINARY and self.per_class:
-            # draw a curve for class 1 (the positive class)
+        else:
             if len(y_pred.shape) == 2 and y_pred.shape[1] == 2:
-                # predict_proba returns array of shape (n, 2), so use
-                # probability of class 1 to compute ROC
                 self.fpr[1], self.tpr[1], _ = roc_curve(y, y_pred[:, 1])
-            else:
-                # decision_function returns array of shape (n,)
-                self.fpr[1], self.tpr[1], _ = roc_curve(y, y_pred)
-            self.roc_auc[1] = auc(self.fpr[1], self.tpr[1])
-
-            # draw a curve for class 0 (the negative class)
-            if len(y_pred.shape) == 2 and y_pred.shape[1] == 2:
-                # predict_proba returns array of shape (n, 2), so use
-                # probability of class 0 to compute ROC
                 self.fpr[0], self.tpr[0], _ = roc_curve(1 - y, y_pred[:, 0])
             else:
-                # decision_function returns array of shape (n,).
-                # To draw a ROC curve for class 0 we swap the classes 0 and 1 in y
-                # and reverse classifiers predictions y_pred.
+                self.fpr[1], self.tpr[1], _ = roc_curve(y, y_pred)
                 self.fpr[0], self.tpr[0], _ = roc_curve(1 - y, -y_pred)
+
+            self.roc_auc[1] = auc(self.fpr[1], self.tpr[1])
             self.roc_auc[0] = auc(self.fpr[0], self.tpr[0])
 
-        else:
-            # Otherwise compute the ROC curve and ROC area for each class
-            for i, c in enumerate(classes):
-                self.fpr[i], self.tpr[i], _ = roc_curve(y, y_pred[:, i], pos_label=c)
-                self.roc_auc[i] = auc(self.fpr[i], self.tpr[i])
-
-        # Compute micro average
-        if self.micro:
-            self._score_micro_average(y, y_pred, classes, n_classes)
-
-        # Compute macro average
-        if self.macro:
-            self._score_macro_average(n_classes)
-
-        # Draw the Curves
-        self.draw()
-
-        # Set score to micro average if specified
-        if self.micro:
-            self.score_ = self.roc_auc[MICRO]
-
-        # Set score to macro average if not micro
-        if self.macro:
-            self.score_ = self.roc_auc[MACRO]
-
-        return self.score_
+    def _score_multiclass(self, y, y_pred, classes):
+        """Computes true/false positive rates for multiclass classification."""
+        for i, c in enumerate(classes):
+            self.fpr[i], self.tpr[i], _ = roc_curve(y, y_pred[:, i], pos_label=c)
+            self.roc_auc[i] = auc(self.fpr[i], self.tpr[i])
 
     def draw(self):
         """
