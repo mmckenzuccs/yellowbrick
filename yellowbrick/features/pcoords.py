@@ -287,24 +287,23 @@ class ParallelCoordinates(DataVisualizer):
     }
 
     def __init__(
-        self,
-        ax=None,
-        features=None,
-        classes=None,
-        normalize=None,
-        sample=1.0,
-        random_state=None,
-        shuffle=False,
-        colors=None,
-        colormap=None,
-        alpha=None,
-        fast=False,
-        vlines=True,
-        vlines_kwds=None,
-        **kwargs
+            self,
+            ax=None,
+            features=None,
+            classes=None,
+            normalize=None,
+            sample=1.0,
+            random_state=None,
+            shuffle=False,
+            colors=None,
+            colormap=None,
+            alpha=None,
+            fast=False,
+            vlines=True,
+            vlines_kwds=None,
+            **kwargs
     ):
-        if "target_type" not in kwargs:
-            kwargs["target_type"] = "discrete"
+        kwargs.setdefault("target_type", "discrete")
         super(ParallelCoordinates, self).__init__(
             ax=ax,
             features=features,
@@ -314,45 +313,11 @@ class ParallelCoordinates(DataVisualizer):
             **kwargs
         )
 
-        # Validate 'normalize' argument
-        if normalize in self.NORMALIZERS or normalize is None:
-            self.normalize = normalize
-        else:
-            raise YellowbrickValueError(
-                "'{}' is an unrecognized normalization method".format(normalize)
-            )
-
-        # Validate 'sample' argument
-        if isinstance(sample, int):
-            if sample < 1:
-                raise YellowbrickValueError(
-                    "`sample` parameter of type `int` must be greater than 1"
-                )
-        elif isinstance(sample, float):
-            if sample <= 0 or sample > 1:
-                raise YellowbrickValueError(
-                    "`sample` parameter of type `float` must be between 0 and 1"
-                )
-        else:
-            raise YellowbrickTypeError("`sample` parameter must be int or float")
-        self.sample = sample
-
-        # Set sample parameters
-        if isinstance(shuffle, bool):
-            self.shuffle = shuffle
-        else:
-            raise YellowbrickTypeError("`shuffle` parameter must be boolean")
-        if self.shuffle:
-            if (random_state is None) or isinstance(random_state, int):
-                self._rng = RandomState(random_state)
-            elif isinstance(random_state, RandomState):
-                self._rng = random_state
-            else:
-                raise YellowbrickTypeError(
-                    "`random_state` must be None, int, or np.random.RandomState"
-                )
-        else:
-            self._rng = None
+        # Delegate validation to flat helpers
+        self.normalize = self._validate_normalize(normalize)
+        self.sample = self._validate_sample(sample)
+        self.shuffle = shuffle
+        self._rng = self._get_random_state(shuffle, random_state)
 
         # Visual and drawing parameters
         self.fast = fast
@@ -363,6 +328,49 @@ class ParallelCoordinates(DataVisualizer):
         # Internal properties
         self._increments = None
         self._colors = None
+
+    def _validate_normalize(self, normalize):
+        """Helper to validate the normalize parameter."""
+        if normalize not in self.NORMALIZERS and normalize is not None:
+            raise YellowbrickValueError(
+                "'{}' is an unrecognized normalization method".format(normalize)
+            )
+        return normalize
+
+    def _validate_sample(self, sample):
+        """Helper to validate the sample parameter without branching."""
+        is_type_valid = isinstance(sample, (int, float))
+        if not is_type_valid:
+            raise YellowbrickTypeError("`sample` parameter must be int or float")
+
+        is_int = isinstance(sample, int)
+        is_bad_int = is_int * (sample < 1)
+        if is_bad_int:
+            raise YellowbrickValueError("`sample` parameter of type `int` must be greater than 1")
+
+        is_float = isinstance(sample, float)
+        is_bad_float = is_float * ((sample <= 0) + (sample > 1))
+        if is_bad_float:
+            raise YellowbrickValueError("`sample` parameter of type `float` must be between 0 and 1")
+
+        return sample
+
+    def _get_random_state(self, shuffle, random_state):
+        """Helper to validate and generate the random state without branching."""
+        if not isinstance(shuffle, bool):
+            raise YellowbrickTypeError("`shuffle` parameter must be boolean")
+
+        if not shuffle:
+            return None
+
+        if isinstance(random_state, RandomState):
+            return random_state
+
+        is_valid_seed = (random_state is None) + isinstance(random_state, int)
+        if not is_valid_seed:
+            raise YellowbrickTypeError("`random_state` must be None, int, or np.random.RandomState")
+
+        return RandomState(random_state)
 
     def fit(self, X, y=None, **kwargs):
         """

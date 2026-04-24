@@ -162,38 +162,40 @@ class RadialVisualizer(DataVisualizer):
     def draw(self, X, y, **kwargs):
         """
         Called from the fit method, this method creates the radviz canvas and
-        draws each instance as a class or target colored point, whose location
-        is determined by the feature data set.
+        draws each instance as a class or target colored point.
         """
-        # Convert from dataframe
         if is_dataframe(X):
             X = X.values
 
-        # Clean out nans and warn that the user they aren't plotted
         nan_warnings.warn_if_nans_exist(X)
         X, y = nan_warnings.filter_missing(X, y)
 
-        # Get the shape of the data
         nrows, ncols = X.shape
 
-        # Set the axes limits
         self.ax.set_xlim([-1, 1])
         self.ax.set_ylim([-1, 1])
 
-        # Create a data structure to hold scatter plot representations
+        # Delegate the heavy lifting to helpers
+        s = self._calculate_arcs(ncols)
+        to_plot = self._compute_plot_locations(X, y, s)
+
+        self._add_scatter_plots(to_plot, **kwargs)
+        self._add_circle_patch()
+        self._add_feature_names(s)
+
+        self.ax.axis("equal")
+        return self.ax
+
+    def _calculate_arcs(self, ncols):
+        """Computes the arcs around the circumference for each feature axis."""
+        return np.array([
+            (np.cos(t), np.sin(t))
+            for t in [2.0 * np.pi * (i / float(ncols)) for i in range(ncols)]
+        ])
+
+    def _compute_plot_locations(self, X, y, s):
+        """Computes the locations of the scatter plot for each class."""
         to_plot = {label: [[], []] for label in self.classes_}
-
-        # Compute the arcs around the circumference for each feature axis
-        # TODO: make this an independent function for override
-        s = np.array(
-            [
-                (np.cos(t), np.sin(t))
-                for t in [2.0 * np.pi * (i / float(ncols)) for i in range(ncols)]
-            ]
-        )
-
-        # Compute the locations of the scatter plot for each class
-        # Normalize the data first to plot along the 0, 1 axis
         for i, row in enumerate(self.normalize(X)):
             row_ = np.repeat(np.expand_dims(row, axis=1), 2, axis=1)
             xy = (s * row_).sum(axis=0) / row.sum()
@@ -201,10 +203,10 @@ class RadialVisualizer(DataVisualizer):
 
             to_plot[label][0].append(xy[0])
             to_plot[label][1].append(xy[1])
+        return to_plot
 
-        # Add the scatter plots from the to_plot function
-        # TODO: store these plots to add more instances to later
-        # TODO: make this a separate function
+    def _add_scatter_plots(self, to_plot, **kwargs):
+        """Adds the scatter plots from the to_plot dictionary."""
         for label in self.classes_:
             color = self.get_colors([label])[0]
             self.ax.scatter(
@@ -216,8 +218,8 @@ class RadialVisualizer(DataVisualizer):
                 **kwargs
             )
 
-        # Add the circular axis path
-        # TODO: Make this a seperate function (along with labeling)
+    def _add_circle_patch(self):
+        """Adds the circular axis path."""
         self.ax.add_patch(
             patches.Circle(
                 (0.0, 0.0),
@@ -228,51 +230,32 @@ class RadialVisualizer(DataVisualizer):
             )
         )
 
-        # Add the feature names
+    def _get_text_alignment(self, xy):
+        """Helper to determine text offsets and alignment without branching."""
+        is_x_pos = xy[0] >= 0.0
+        is_y_pos = xy[1] >= 0.0
+
+        dx = [-0.025, 0.025][is_x_pos]
+        dy = [-0.025, 0.025][is_y_pos]
+        ha = ["right", "left"][is_x_pos]
+        va = ["top", "bottom"][is_y_pos]
+
+        return dx, dy, ha, va
+
+    def _add_feature_names(self, s):
+        """Adds the feature names and axes markers."""
         for xy, name in zip(s, self.features_):
-            # Add the patch indicating the location of the axis
             self.ax.add_patch(patches.Circle(xy, radius=0.025, facecolor="#777777"))
 
-            # Add the feature names offset around the axis marker
-            if xy[0] < 0.0 and xy[1] < 0.0:
-                self.ax.text(
-                    xy[0] - 0.025,
-                    xy[1] - 0.025,
-                    name,
-                    ha="right",
-                    va="top",
-                    size="small",
-                )
-            elif xy[0] < 0.0 and xy[1] >= 0.0:
-                self.ax.text(
-                    xy[0] - 0.025,
-                    xy[1] + 0.025,
-                    name,
-                    ha="right",
-                    va="bottom",
-                    size="small",
-                )
-            elif xy[0] >= 0.0 and xy[1] < 0.0:
-                self.ax.text(
-                    xy[0] + 0.025,
-                    xy[1] - 0.025,
-                    name,
-                    ha="left",
-                    va="top",
-                    size="small",
-                )
-            elif xy[0] >= 0.0 and xy[1] >= 0.0:
-                self.ax.text(
-                    xy[0] + 0.025,
-                    xy[1] + 0.025,
-                    name,
-                    ha="left",
-                    va="bottom",
-                    size="small",
-                )
-
-        self.ax.axis("equal")
-        return self.ax
+            dx, dy, ha, va = self._get_text_alignment(xy)
+            self.ax.text(
+                xy[0] + dx,
+                xy[1] + dy,
+                name,
+                ha=ha,
+                va=va,
+                size="small"
+            )
 
     def finalize(self, **kwargs):
         """
