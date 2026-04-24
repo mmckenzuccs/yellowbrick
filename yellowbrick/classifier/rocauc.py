@@ -280,8 +280,7 @@ class ROCAUC(ClassificationScoreVisualizer):
 
         if self.macro:
             self._score_macro_average(n_classes)
-            if not self.micro:  # Micro takes precedence for final score
-                self.score_ = self.roc_auc[MACRO]
+            self.score_ = self.roc_auc[MACRO]
 
     def _validate_binary(self, y_pred):
         """Helper to validate binary input constraints."""
