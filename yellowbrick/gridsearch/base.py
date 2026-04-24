@@ -32,6 +32,58 @@ from ..exceptions import (
 ##########################################################################
 
 
+# Function to extract the parameter values and score corresponding to 
+# each gridsearch trial.
+def _get_cv_result(cv_results, key, template):
+    try:
+        return cv_results[key]
+    except KeyError:
+        raise YellowbrickKeyError(template.format(key.replace("param_", "")))
+
+# Numpy supplies a masked array, use this instead
+def _map_masked_indices(values, mapping):
+    mask = np.ma.getmaskarray(values)
+    return [
+        None if is_masked else mapping[value]
+        for value, is_masked in zip(np.asarray(values), mask)
+    ]
+
+# All scores for each coordinate pair
+def _accumulate_param_scores(idx_x, idx_y, scores, n_x, n_y):
+    all_scores = [[None for _ in range(n_x)] for _ in range(n_y)]
+    for x, y, score in zip(idx_x, idx_y, scores):
+        if x is None or y is None:
+            continue
+
+        if all_scores[y][x] is None:
+            all_scores[y][x] = []
+        all_scores[y][x].append(score)
+
+    return all_scores
+
+# Get a numpy array consisting of the best scores for each parameter pair
+def _best_scores_grid(all_scores, metric):
+    n_y = len(all_scores)
+    n_x = len(all_scores[0]) if n_y else 0
+    best_scores = np.empty((n_y, n_x))
+
+    for y in range(n_y):
+        for x in range(n_x):
+            if all_scores[y][x] is None:
+                best_scores[y, x] = np.nan
+                continue
+
+            try:
+                best_scores[y, x] = max(all_scores[y][x])
+            except ValueError:
+                raise YellowbrickValueError(
+                    "Cannot display grid search results for metric '{}': "
+                    "result values may not all be numeric".format(metric)
+                )
+
+    return best_scores
+
+
 def param_projection(cv_results, x_param, y_param, metric="mean_test_score"):
     """
     Projects the grid search results onto 2 dimensions.
@@ -68,25 +120,21 @@ def param_projection(cv_results, x_param, y_param, metric="mean_test_score"):
     # trial.
     # These are masked arrays where the cases where each parameter is
     # non-applicable are masked.
-    try:
-        x_vals = cv_results["param_" + x_param]
-    except KeyError:
-        raise YellowbrickKeyError(
-            "Parameter '{}' does not exist in the grid "
-            "search results".format(x_param)
-        )
-    try:
-        y_vals = cv_results["param_" + y_param]
-    except KeyError:
-        raise YellowbrickKeyError(
-            "Parameter '{}' does not exist in the grid "
-            "search results".format(y_param)
-        )
-
-    if metric not in cv_results:
-        raise YellowbrickKeyError(
-            "Metric '{}' does not exist in the grid " "search results".format(metric)
-        )
+    x_vals = _get_cv_result(
+        cv_results,
+        "param_" + x_param,
+        "Parameter '{}' does not exist in the grid search results",
+    )
+    y_vals = _get_cv_result(
+        cv_results,
+        "param_" + y_param,
+        "Parameter '{}' does not exist in the grid search results",
+    )
+    scores = _get_cv_result(
+        cv_results,
+        metric,
+        "Metric '{}' does not exist in the grid search results",
+    )
 
     # Get unique, unmasked values of the two display parameters
     unique_x_vals = sorted(list(set(x_vals.compressed())))
@@ -99,33 +147,14 @@ def param_projection(cv_results, x_param, y_param, metric="mean_test_score"):
     int_mapping_2 = {value: idx for idx, value in enumerate(unique_y_vals)}
 
     # Translate each gridsearch result to indices on the grid
-    idx_x = [int_mapping_1[value] if value else None for value in x_vals]
-    idx_y = [int_mapping_2[value] if value else None for value in y_vals]
+    idx_x = _map_masked_indices(x_vals, int_mapping_1)
+    idx_y = _map_masked_indices(y_vals, int_mapping_2)
 
     # Create an array of all scores for each value of the display parameters.
     # This is a n_x by n_y array of lists with `None` in place of empties
     # (my kingdom for a dataframe...)
-    all_scores = [[None for _ in range(n_x)] for _ in range(n_y)]
-    for x, y, score in zip(idx_x, idx_y, cv_results[metric]):
-        if x is not None and y is not None:
-            if all_scores[y][x] is None:
-                all_scores[y][x] = []
-            all_scores[y][x].append(score)
-
-    # Get a numpy array consisting of the best scores for each parameter pair
-    best_scores = np.empty((n_y, n_x))
-    for x in range(n_x):
-        for y in range(n_y):
-            if all_scores[y][x] is None:
-                best_scores[y, x] = np.nan
-            else:
-                try:
-                    best_scores[y, x] = max(all_scores[y][x])
-                except ValueError:
-                    raise YellowbrickValueError(
-                        "Cannot display grid search results for metric '{}': "
-                        "result values may not all be numeric".format(metric)
-                    )
+    all_scores = _accumulate_param_scores(idx_x, idx_y, scores, n_x, n_y)
+    best_scores = _best_scores_grid(all_scores, metric)
 
     return unique_x_vals, unique_y_vals, best_scores
 

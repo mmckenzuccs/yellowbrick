@@ -275,47 +275,67 @@ class JointPlot(FeatureVisualizer):
             An vector or 1D array that has the same length as X. May be used to either
             directly plot data or to color data points.
         """
-        # Convert python objects to numpy arrays
+        
+        X, y = self._coerce_inputs(X, y)
+
+        if self.columns is None:
+            return self._fit_no_columns(X, y)
+
+        if isinstance(self.columns, (int, str)):
+            return self._fit_single_column(X, y)
+
+        return self._fit_column_pair(X)
+
+    # Convert python objects to numpy arrays
+    @staticmethod
+    def _coerce_inputs(X, y):
         if isinstance(X, (list, tuple)):
             X = np.array(X)
 
         if y is not None and isinstance(y, (list, tuple)):
             y = np.array(y)
 
-        # Case where no columns are specified
-        if self.columns is None:
-            if (y is None and (X.ndim != 2 or X.shape[1] != 2)) or (
-                y is not None and (X.ndim != 1 or y.ndim != 1)
-            ):
-                raise YellowbrickValueError(
-                    (
-                        "when self.columns is None specify either X and y as 1D arrays "
-                        "or X as a matrix with 2 columns"
-                    )
+        return X, y
+
+    # Check if data is valid 
+    @staticmethod
+    def _valid_no_column_data(X, y):
+        if y is None:
+            return X.ndim == 2 and X.shape[1] == 2
+
+        return X.ndim == 1 and y.ndim == 1
+
+    # Case where no columns are specified
+    def _fit_no_columns(self, X, y):
+        if not self._valid_no_column_data(X, y):
+            raise YellowbrickValueError(
+                (
+                    "when self.columns is None specify either X and y as 1D arrays "
+                    "or X as a matrix with 2 columns"
                 )
+            )
 
-            if y is None:
-                # Draw the first column as x and the second column as y
-                self.draw(X[:, 0], X[:, 1], xlabel="0", ylabel="1")
-                return self
-
-            # Draw x against y
-            self.draw(X, y, xlabel="x", ylabel="y")
+        if y is None:
+            # Draw the first column as x and the second column as y
+            self.draw(X[:, 0], X[:, 1], xlabel="0", ylabel="1")
             return self
+        # Draw x against y
+        self.draw(X, y, xlabel="x", ylabel="y")
+        return self
 
-        # Case where a single string or int index is specified
-        if isinstance(self.columns, (int, str)):
-            if y is None:
-                raise YellowbrickValueError(
-                    "when self.columns is a single index, y must be specified"
-                )
+    # Case where a single string or index is specified
+    def _fit_single_column(self, X, y):
+        if y is None:
+            raise YellowbrickValueError(
+                "when self.columns is a single index, y must be specified"
+            )
+        # fetch the index from X -- raising index error if not possible
+        x = self._index_into(self.columns, X)
+        self.draw(x, y, xlabel=str(self.columns), ylabel="target")
+        return self
 
-            # fetch the index from X -- raising index error if not possible
-            x = self._index_into(self.columns, X)
-            self.draw(x, y, xlabel=str(self.columns), ylabel="target")
-            return self
-
-        # Case where there is a double index for both columns
+    # Case where there is a double index for both columns
+    def _fit_column_pair(self, X):
         columns = tuple(self.columns)
         if len(columns) != 2:
             raise YellowbrickValueError(

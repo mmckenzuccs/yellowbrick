@@ -436,53 +436,54 @@ class PosTagVisualizer(TextVisualizer):
         for idx, tagged_doc in enumerate(X):
             for tagged_sent in tagged_doc:
                 for _, tag in tagged_sent:
-                    if self.stack:
-                        counter = self.pos_tag_counts_[y[idx]]
-                    else:
-                        counter = self.pos_tag_counts_["documents"]
+                    counter = self._get_pos_counter(idx, y)
+                    counter[self._get_tag_category(tag)] += 1
 
-                    if tag.startswith("N"):
-                        counter["noun"] += 1
-                    elif tag.startswith("J"):
-                        counter["adjective"] += 1
-                    elif tag.startswith("V"):
-                        counter["verb"] += 1
-                    # include particles with adverbs
-                    elif tag.startswith("RB") or tag == "RP":
-                        counter["adverb"] += 1
-                    elif tag.startswith("PR"):
-                        counter["pronoun"] += 1
-                    elif tag.startswith("W"):
-                        counter["wh- word"] += 1
-                    elif tag == "CC":
-                        counter["conjunction"] += 1
-                    elif tag == "CD":
-                        counter["digit"] += 1
-                    # combine predeterminer and determiner
-                    elif tag in ["DT" or "PDT"]:
-                        counter["determiner"] += 1
-                    elif tag == "EX":
-                        counter["existential"] += 1
-                    elif tag == "FW":
-                        counter["non-English"] += 1
-                    elif tag == "IN":
-                        counter["preposition"] += 1
-                    elif tag == "POS":
-                        counter["possessive"] += 1
-                    elif tag == "LS":
-                        counter["list"] += 1
-                    elif tag == "MD":
-                        counter["modal"] += 1
-                    elif tag in self.punct_tags:
-                        counter["punctuation"] += 1
-                    elif tag == "TO":
-                        counter["infinitive"] += 1
-                    elif tag == "UH":
-                        counter["interjection"] += 1
-                    elif tag == "SYM":
-                        counter["symbol"] += 1
-                    else:
-                        counter["other"] += 1
+    # Method for returning the correct document counter
+    def _get_pos_counter(self, idx, y):
+        if self.stack:
+            return self.pos_tag_counts_[y[idx]]
+        return self.pos_tag_counts_["documents"]
+
+    # Method for matching prefixes to tag category
+    def _get_tag_category(self, tag):
+        if tag.startswith("N"):
+            return "noun"
+        if tag.startswith("J"):
+            return "adjective"
+        if tag.startswith("V"):
+            return "verb"
+        if tag.startswith("RB") or tag == "RP":
+            return "adverb"
+        if tag.startswith("PR"):
+            return "pronoun"
+        if tag.startswith("W"):
+            return "wh- word"
+
+        return self._get_exact_tag_category(tag)
+
+    # Method for matching exact pos, should be noticeably faster 
+    # PDT previously was tagged as other, will now be properly tagged
+    def _get_exact_tag_category(self, tag):
+        treebank_map = {
+            "CC": "conjunction",
+            "CD": "digit",
+            "DT": "determiner",
+            "PDT": "determiner",
+            "EX": "existential",
+            "FW": "non-English",
+            "IN": "preposition",
+            "POS": "possessive",
+            "LS": "list",
+            "MD": "modal",
+            "TO": "infinitive",
+            "UH": "interjection",
+            "SYM": "symbol",
+        }
+
+        if tag in self.punct_tags:
+            return "punctuation"
+        return treebank_map.get(tag, "other")
 
     def draw(self, **kwargs):
         """

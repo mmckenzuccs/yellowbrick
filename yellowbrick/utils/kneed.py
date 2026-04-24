@@ -189,17 +189,15 @@ class KneeLocator(object):
     ):
         """This function finds and sets the knee value and the normalized knee value. """
         if not self.maxima_indices.size:
-            warning_message = (
-                'No "knee" or "elbow point" detected '
-                "This could be due to bad clustering, no "
-                "actual clusters being formed etc."
-            )
-            warnings.warn(warning_message, YellowbrickWarning)
+            self._warn_no_knee()
             return None, None
 
         # placeholder for which threshold region i is located in.
         maxima_threshold_index = 0
         minima_threshold_index = 0
+        threshold = None
+        threshold_index = None
+        knee = norm_knee = None
         # traverse the difference curve
         for i, x in enumerate(self.x_difference):
             # skip points on the curve before the the first local maxima
@@ -217,47 +215,60 @@ class KneeLocator(object):
                 threshold = self.Tmx[maxima_threshold_index]
                 threshold_index = i
                 maxima_threshold_index += 1
+
             # values in difference curve are at or after a local minimum
             if (self.minima_indices == i).any():
                 threshold = 0.0
                 minima_threshold_index += 1
 
-            if self.y_difference[j] < threshold:
-                if self.curve_nature == "convex":
-                    if self.curve_direction == "decreasing":
-                        knee = self.x[threshold_index]
-                        norm_knee = self.x_normalized[threshold_index]
-                    else:
-                        knee = self.x[-(threshold_index + 1)]
-                        norm_knee = self.x_normalized[threshold_index]
+            if threshold is None or self.y_difference[j] >= threshold:
+                continue
 
-                elif self.curve_nature == "concave":
-                    if self.curve_direction == "decreasing":
-                        knee = self.x[-(threshold_index + 1)]
-                        norm_knee = self.x_normalized[threshold_index]
-                    else:
-                        knee = self.x[threshold_index]
-                        norm_knee = self.x_normalized[threshold_index]
+            knee, norm_knee = self.get_knee_from_threshold_index(threshold_index)
+            self._record_knee(knee, norm_knee)
 
-                # add the y value at the knee
-                y_at_knee = self.y[self.x == knee][0]
-                y_norm_at_knee = self.y_normalized[self.x_normalized == norm_knee][0]
-                if knee not in self.all_knees:
-                    self.all_knees_y.append(y_at_knee)
-                    self.all_norm_knees_y.append(y_norm_at_knee)
-
-                # now add the knee
-                self.all_knees.add(knee)
-                self.all_norm_knees.add(norm_knee)
-
-                # if detecting in offline mode, return the first knee found
-                if self.online is False:
-                    return knee, norm_knee
+            # if detecting in offline mode, return the first knee found
+            if self.online is False:
+                return knee, norm_knee
 
         if self.all_knees == set():
             return None, None
 
         return knee, norm_knee
+
+    # Method to warn of no knee detection
+    @staticmethod
+    def _warn_no_knee():
+        warning_message = (
+            'No "knee" or "elbow point" detected '
+            "This could be due to bad clustering, no "
+            "actual clusters being formed etc."
+        )
+        warnings.warn(warning_message, YellowbrickWarning)
+
+    # Method to calculate knee point using threshold_index
+    def get_knee_from_threshold_index(self, threshold_index):
+        index_map = {
+        ("convex", "decreasing"): threshold_index,
+        ("convex", "increasing"): -(threshold_index + 1),
+        ("concave", "decreasing"): -(threshold_index + 1),
+        ("concave", "increasing"): threshold_index,
+        }
+        x_index = index_map[(self.curve_nature, self.curve_direction)]
+        return self.x[x_index], self.x_normalized[threshold_index]
+
+    # Method to grab y value and store both x and y for each knee
+    def _record_knee(self, knee, norm_knee):
+        # add the y value at the knee
+        y_at_knee = self.y[self.x == knee][0]
+        y_norm_at_knee = self.y_normalized[self.x_normalized == norm_knee][0]
+        if knee not in self.all_knees:
+            self.all_knees_y.append(y_at_knee)
+            self.all_norm_knees_y.append(y_norm_at_knee)
+
+        # now add the knee
+        self.all_knees.add(knee)
+        self.all_norm_knees.add(norm_knee)
 
     def plot_knee_normalized(
         self,
