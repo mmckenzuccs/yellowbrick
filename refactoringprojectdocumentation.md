@@ -2,10 +2,10 @@ In all cases, the high cyclomatic complexity scores for a function/method were a
 
 ### 1. Grid Search Parameter Projection
 
-File: `yellowbrick/gridsearch/base.py`
-Function: `param_projection`
+File: `yellowbrick/gridsearch/base.py` \
+Function: `param_projection` \
 Purpose: Projects `GridSearchCV.cv_results_` onto two selected parameters and
-  keeps the best score for each displayed parameter pair.
+keeps the best score for each displayed parameter pair.
 Changes made:
   - Added `_get_cv_result` to extract parameter and score lookup for each grid-search trial.
   - Added `_map_masked_indices` for masked-array handling of non-applicable parameter values.
@@ -14,8 +14,8 @@ Changes made:
 
 ### 2. Joint Plot Fitting
 
-File: `yellowbrick/features/jointplot.py`
-Function: `JointPlot.fit`
+File: `yellowbrick/features/jointplot.py` \
+Function: `JointPlot.fit` \
 Purpose: Chooses how to draw a joint plot depending on whether no columns, one
 column, or two columns are configured.
 Changes made:
@@ -25,10 +25,10 @@ Changes made:
 
 ### 3. Knee / Elbow Detection
 
-File: `yellowbrick/utils/kneed.py`
-Function: `KneeLocator.find_knee`
+File: `yellowbrick/utils/kneed.py` \
+Function: `KneeLocator.find_knee` \
 Purpose: Detects the knee or elbow point used by visualizers such as
-  `KElbowVisualizer`.
+`KElbowVisualizer`.
 Changes made:
   - Kept `find_knee` focused on traversing the difference curve.
   - Added `_warn_no_knee` to warn when no knee is detected.
@@ -38,8 +38,8 @@ Changes made:
 
 ### 4. Part-of-Speech Tag Counts
 
-File: `yellowbrick/text/postag.py`
-Function: `PosTagVisualizer._handle_treebank`
+File: `yellowbrick/text/postag.py` \
+Function: `PosTagVisualizer._handle_treebank` \
 Purpose: Counts Penn Treebank part-of-speech categories for text
 visualizations.
 Changes made:
@@ -48,15 +48,10 @@ Changes made:
   - Added `_get_exact_tag_category` for exact POS matching and faster tag lookup.
   - Bug Fix: Updated `_get_exact_tag_category` to properly map `PDT` instead of sending it to `other`.
 
-We have also added a notebook `RefactoredFunctionExamples` that exercises all of the refactored functions/methods. You can run this file on the main branch of the repository and our branch, observing
-that the outputs of each cell do not change. Thus our changes have not altered the behavior of the targets.
-
 ### 5. ROCAUC Scoring
 
-File: `yellowbrick/classifier/rocauc.py`
-
-Function: `ROCAUC.score`
-
+File: `yellowbrick/classifier/rocauc.py` \
+Function: `ROCAUC.score` \
 Purpose: Generates the Receiver Operating Characteristic (ROC) curve and calculates the Area Under the Curve (AUC).
 
 Changes made:
@@ -66,10 +61,8 @@ Changes made:
 
 ### 6. Color Resolution
 
-File: `yellowbrick/style/colors.py`
-
-Function: `resolve_colors`
-
+File: `yellowbrick/style/colors.py` \
+Function: `resolve_colors` \
 Purpose: Resolves user-provided colormap strings into Matplotlib Palette objects.
 
 Changes made:
@@ -79,10 +72,8 @@ Changes made:
 
 ### 7. Radial Visualizer Drawing
 
-File: `yellowbrick/features/radviz.py`
-
-Function: `RadialVisualizer.draw`
-
+File: `yellowbrick/features/radviz.py` \
+Function: `RadialVisualizer.draw` \
 Purpose: Plots data instances on a 2D circle based on their feature values.
 
 Changes made:
@@ -92,10 +83,8 @@ Changes made:
 
 ### 8. Parallel Coordinates Initialization
 
-File: `yellowbrick/features/pcoords.py`
-
-Function: `ParallelCoordinates.__init__`
-
+File: `yellowbrick/features/pcoords.py` \
+Function: `ParallelCoordinates.__init__` \
 Purpose: Initializes the parallel coordinates visualization and processes configuration logic.
 
 Changes made:
@@ -103,5 +92,5 @@ Changes made:
 - Added `_validate_sample` to handle sample bounds and type validation.
 - Added `_get_random_state` to extract random seed generation and typing logic.
 
-### Summary of Complexity Reductions
-Across all 8 target modules, the application of structural design patterns (specifically the Template Method and Strategy patterns) successfully decoupled overlapping responsibilities. This approach reduced the Cyclomatic Complexity (CC) scores from failing maintainability grades (Grade C/D, CC >= 15) to optimal levels (Grade A, CC <= 5) without altering the behavior of the visualizers.
+We have also added a notebook `RefactoredFunctionExamples`, for regression testing, that exercises all of the refactored functions/methods. You can run this file on the main branch of the repository and our branch, observing
+that the outputs of each cell do not change. Thus our changes have not altered the behavior of the targets.
